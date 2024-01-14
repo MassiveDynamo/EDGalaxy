@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ImportEDSMSystems": {
+      "commandName": "Project",
+      "commandLineArgs": "--SystemsWithCoordinatesUrl \"https://www.edsm.net/dump/systemsWithCoordinates.json.gz\"\r\n--SystemsWithCoordinatesFilename \"D:\\data\\EDSM-Dumps\\systemsWithCoordinates.json.gz\" --DbConnection Galaxy"
+    }
+  }
+}
