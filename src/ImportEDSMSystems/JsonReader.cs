@@ -40,15 +40,17 @@ namespace DataReaderExample
             if (line == null) return null;
 
             _index++;
-            line = line.Trim();
-            if (line == null || line.Length == 0) return null;
-            while (line!.Length < 10)
+            string? trimLine = line.Trim();
+            if (trimLine == null || trimLine.Length == 0) return null;
+            if (trimLine.Length < 10)
             {
-                line = GetJsonLine();
+                line = _sr.ReadLine();
+                if (line == null) return null;
+                trimLine = line.Trim();
             }
 
-            if (line.EndsWith(",")) line = line[..^1];
-            return line;
+            if (trimLine.EndsWith(',')) trimLine = trimLine[..^1];
+            return trimLine;
         }
 
         public int FieldCount

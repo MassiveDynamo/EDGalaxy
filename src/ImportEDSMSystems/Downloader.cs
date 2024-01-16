@@ -1,5 +1,4 @@
 ﻿using Serilog.Core;
-using System.Net.Http;
 
 internal class Downloader
 {

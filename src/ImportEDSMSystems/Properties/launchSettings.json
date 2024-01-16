@@ -1,8 +1,8 @@
 {
   "profiles": {
-    "ImportEDSMSystems": {
+    "ImportEdsmSystems": {
       "commandName": "Project",
-      "commandLineArgs": "--SystemsWithCoordinatesUrl \"https://www.edsm.net/dump/systemsWithCoordinates.json.gz\"\r\n--SystemsWithCoordinatesFilename \"D:\\data\\EDSM-Dumps\\systemsWithCoordinates.json.gz\" --DbConnection Galaxy"
+      "commandLineArgs": "--SystemsWithCoordinatesUrl \"https://www.edsm.net/dump/systemsWithCoordinates.json.gz\"\r\n--SystemsWithCoordinatesFilename \"D:\\data\\EDSM-Dumps\\systemsWithCoordinates.json.gz\" --DbConnection \"Server=localhost;User ID=root;Password=S0lskin1;Database=Galaxy\""
     }
   }
 }

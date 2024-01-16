@@ -1,26 +1,18 @@
-﻿// -SystemsZipfile "D:\data\EDSM-Dumps\systemsWithCoordinates.json.gz" -ExpandSystemName "D:\data\EDSM-Dumps\systemsWithCoordinates.json" -Force
-// & "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\Extensions\Microsoft\SQLDB\DAC\SqlPackage.exe" /Sourcefile:D:\prj\Galaxy.Net7\src\eddb\bin\Release\eddb.dacpac /TargetDatabaseName:eddb /TargetServerName:"(localdb)\MSSQLLocalDB" /Action:Publish
-
-using ImportEdsmSystems;
+﻿using ImportEdsmSystems;
 using Ionic.Zlib;
 using Microsoft.Extensions.Configuration;
 using Serilog;
 using Serilog.Core;
-using Serilog.Formatting.Compact;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
-using System.Text.RegularExpressions;
 
 // https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/how-to-implement-a-producer-consumer-dataflow-pattern
 
 internal class Program
 {
-    private static void Main(string[] args)
+    private static async Task Main(string[] args)
     {
-
-        // string connectionString = $"Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog={initialCatalog};Integrated Security=True;Connect Timeout=30;Encrypt=False;TrustServerCertificate=False;ApplicationIntent=ReadWrite;MultiSubnetFailover=False";
-        // string destinationTableName = "[dbo].[tblEDSystemsWithCoordinates]";
-
         var configuration = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("appsettings.json")
@@ -28,49 +20,70 @@ internal class Program
                 .AddCommandLine(args)
                 .Build();
 
+        var appSettings = new AppSettings(configuration["SystemsWithCoordinatesUrl"], configuration["SystemsWithCoordinatesFilename"], configuration["DbConnection"]);
+
         var logger = new LoggerConfiguration()
             .ReadFrom.Configuration(configuration)
             .CreateLogger();
 
-        logger.Information("SystemsWithCoordinatesUrl:{SystemsWithCoordinatesUrl}", configuration["SystemsWithCoordinatesUrl"]);
-        logger.Information("SystemsWithCoordinatesFilename:{SystemsWithCoordinatesFilename}", configuration["SystemsWithCoordinatesFilename"]);
-        logger.Information("DbConnection:{dbConnection}", configuration["DbConnection"]);
+        logger.Information("SystemsWithCoordinatesUrl:{SystemsWithCoordinatesUrl}", appSettings.SystemsWithCoordinatesUrl);
+        logger.Information("SystemsWithCoordinatesFilename:{SystemsWithCoordinatesFilename}", appSettings.SystemsWithCoordinatesFilename);
+        logger.Information("ExpandedSystemsFileName:{ExpandedSystemsFileName}", appSettings.ExpandedSystemsFileName);
+        logger.Information("DbConnection:{dbConnection}", appSettings.DbConnection);
 
-        Downloader.DownloadFile(logger, configuration["SystemsWithCoordinatesUrl"], configuration["SystemsWithCoordinatesFilename"]);
-        string outputFile = CreateOutputFileName(configuration["SystemsWithCoordinatesFilename"]);
-        UnzipFile(logger, configuration["SystemsWithCoordinatesFilename"], outputFile);
+        Downloader.DownloadFile(logger, appSettings.SystemsWithCoordinatesUrl, appSettings.SystemsWithCoordinatesFilename);
+        UnzipFile(logger, appSettings.SystemsWithCoordinatesFilename, appSettings.ExpandedSystemsFileName);
+        var systemsIds = await DB.GetAllIds(logger, appSettings.DbConnection);
 
         Stopwatch w = Stopwatch.StartNew();
         SortedDictionary<int, EDSystemJson> list = [];
-        using DataReaderExample.JsonDataReader rdr = new(configuration["SystemsWithCoordinatesFilename"]);
+        using DataReaderExample.JsonDataReader rdr = new(appSettings.ExpandedSystemsFileName);
 
         int rowsRead = 0;
-        //while (rdr.Read())
-        //{
-        //    list.Add(rdr.CurrentElement.Id, rdr.CurrentElement);
-        //    rowsRead++;
-        //    if (rowsRead % 1000000 == 0)
-        //    {
-        //        Console.WriteLine($"Rows read (million): {rowsRead / 1000000}", rowsRead);
-
-        //    }
-        //}
-
-        w.Stop();
-        Console.WriteLine($"Lines read: {list.Count}");
-        Console.WriteLine($"Time elapsed: {w.Elapsed}");
-    }
-
-    private static string CreateOutputFileName(string fileName)
-    {
-        ArgumentNullException.ThrowIfNull(fileName);
-        if (!fileName.EndsWith(".gz", StringComparison.OrdinalIgnoreCase))
+        while (rdr.Read())
         {
-            return fileName + ".json";
+            if (!systemsIds.Contains(rdr.CurrentElement.Id))
+            {
+                list.Add(rdr.CurrentElement.Id, rdr.CurrentElement);
+                rowsRead++;
+                if (rowsRead % 10000000 == 0)
+                {
+                    logger.Information("Rows read (million): {rowsRead}", rowsRead);
+                    ExportToCsv(logger, list, appSettings.ExpandedSystemsFileName, rowsRead);
+                    list.Clear();
+                }
+            }
         }
 
-        var re = new Regex(@"\.gz$", RegexOptions.IgnoreCase);
-        return re.Replace(fileName, "");
+        if( list.Count > 0 )
+        {
+            ExportToCsv(logger, list, appSettings.ExpandedSystemsFileName, rowsRead);
+            list.Clear();
+        }
+
+        w.Stop();
+        logger.Information("Lines read: {rowsRead} in {elapsed} ms", rowsRead, w.ElapsedMilliseconds);
+    }
+
+    private static void ExportToCsv(Logger logger, SortedDictionary<int, EDSystemJson> list, string expandedSystemsFileName, int rowsRead)
+    {
+        var fileName = expandedSystemsFileName + "_" + rowsRead + ".csv";
+        var fi = new FileInfo(fileName);
+        if( fi.Exists) { fi.Delete(); }
+        using StreamWriter sw = new(new FileStream(fileName, FileMode.Create), new UTF8Encoding(false));
+        foreach( var row in list) 
+        {
+            var line = string.Format("{0},{1},\"{2}\",{3},{4},{5}",
+                row.Value.Id,
+                row.Value.Id64,
+                row.Value.Name,
+                row.Value.Coords.X.ToString(CultureInfo.InvariantCulture),
+                row.Value.Coords.Y.ToString(CultureInfo.InvariantCulture),
+                row.Value.Coords.Z.ToString(CultureInfo.InvariantCulture));
+            sw.WriteLine(line);
+        }
+
+        sw.Close();
     }
 
     private static void UnzipFile(Logger logger, string fileName, string outputFile)
